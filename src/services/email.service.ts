@@ -28,7 +28,7 @@ export class EmailService {
         <h1>Confirm your email address</h1>
         <p>Please click the link below to confirm your email address and finish setting up your account. This link is valid for 1 hour.</p>
         <div>
-          <a href=${link}>Confirm</a>
+          <a href="${process.env.FRONTEND_URL}/verify/${link}">Confirm</a>
         </div>
       `,
     };
