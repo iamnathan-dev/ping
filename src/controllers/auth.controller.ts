@@ -56,7 +56,7 @@ export class AuthController {
       );
 
       const verificationToken = jwt.sign(
-        { id: user.id },
+        { email: user.email },
         process.env.JWT_SECRET as string,
         { expiresIn: "1h" }
       );
@@ -104,6 +104,14 @@ export class AuthController {
         return;
       }
 
+      if (!user.verified) {
+        res.status(status.FORBIDDEN).json({
+          status: status[403],
+          message: "Please verify your account before login!",
+        });
+        return;
+      }
+
       const isMatch = await user.comparePassword(password);
 
       if (!isMatch) {
@@ -140,8 +148,52 @@ export class AuthController {
   }
 
   async verifyEmail(req: Request, res: Response): Promise<void> {
+    const { token } = req.query;
+
     try {
-      // todo: verify email logic
+      if (!token || typeof token !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Verification token is required",
+        });
+        return;
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET environment variable is not set");
+        res.status(status.INTERNAL_SERVER_ERROR).json({
+          status: status[500],
+          message: "Server configuration error",
+        });
+        return;
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+        email: string;
+      };
+
+      const user = await this.userRepository.findOneBy({
+        email: decoded.email,
+      });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Invalid or expired verification token",
+        });
+        return;
+      }
+
+      user.verified = true;
+      await this.userRepository.save(user);
+
+      const userResponse = plainToClass(Users, user);
+
+      res.status(status.OK).json({
+        status: status[200],
+        data: userResponse,
+        message: "Email verified successfully",
+      });
     } catch (error) {
       res
         .status(status.INTERNAL_SERVER_ERROR)

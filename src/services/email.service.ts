@@ -24,12 +24,15 @@ export class EmailService {
       to,
       subject: "[URGENT]: Verify email address",
       html: `
-        <h4>Hello, ${full_name}</h4>
-        <h1>Confirm your email address</h1>
-        <p>Please click the link below to confirm your email address and finish setting up your account. This link is valid for 1 hour.</p>
+        <h1>Hello, ${full_name}!</h1>
+        <p>Please verify your email address by clicking the link below:</p>
         <div>
-          <a href="${process.env.FRONTEND_URL}/verify/${link}">Confirm</a>
+          <a href="${process.env.CLIENT_URL}/verify-email?token=${link}">Verify email</a>
         </div>
+
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't register, please ignore this email.</p>
+        <p>Best regards,<br>The Ping Team</p>
       `,
     };
 
