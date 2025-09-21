@@ -7,12 +7,15 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { plainToClass } from "class-transformer";
 import { EmailService } from "../services/email.service";
+import { strongPasswordRegex } from "../constants/global.constant";
+import EncryptionService from "../services/encryption.service";
 
 dotenv.config();
 
 export class AuthController {
   private userRepository = AppDataSource.getRepository(Users);
   private emailService = new EmailService();
+  private encryptionService = new EncryptionService();
 
   async register(req: Request, res: Response): Promise<void> {
     const { full_name, email, password } = req.body;
@@ -36,7 +39,21 @@ export class AuthController {
         return;
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const isPasswordValid =
+        this.encryptionService.checkPasswordStrength(password);
+
+      if (!isPasswordValid) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message:
+            "Password must contain at least 8 characters, including one uppercase letter, one lowercase letter, one number, and one special character.",
+        });
+        return;
+      }
+
+      const hashedPassword = await this.encryptionService.hashPassword(
+        password
+      );
       const user = this.userRepository.create({
         full_name,
         email,
@@ -237,28 +254,27 @@ export class AuthController {
         return;
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const isPasswordValid =
+        this.encryptionService.checkPasswordStrength(password);
+
+      if (!isPasswordValid) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message:
+            "Password must contain at least 8 characters, including one uppercase letter, one lowercase letter, one number, and one special character.",
+        });
+        return;
+      }
+
+      const hashedPassword = await this.encryptionService.hashPassword(
+        password
+      );
       user.password = hashedPassword;
       await this.userRepository.save(user);
 
-      const access_token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1h" }
-      );
-      const refresh_token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1w" }
-      );
-
-      const userResponse = plainToClass(Users, user);
-
       res.status(status.OK).json({
         status: status[200],
-        data: userResponse,
-        access_token,
-        refresh_token,
+        message: "password reset successfull",
       });
     } catch (error) {
       res

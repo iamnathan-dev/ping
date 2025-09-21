@@ -18,7 +18,7 @@ export class Users {
   password!: string;
 
   @Column({ default: false })
-  verified?: boolean;
+  verified!: boolean;
 
   @Column({ type: "timestamp", nullable: true })
   date_of_birth?: Date;
