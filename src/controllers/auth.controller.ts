@@ -18,14 +18,21 @@ export class AuthController {
   private encryptionService = new EncryptionService();
 
   async register(req: Request, res: Response): Promise<void> {
-    const { full_name, email, password } = req.body;
+    const { firstName, lastName, email, password, username, phoneNumber } =
+      req.body;
 
     try {
-      if (!full_name || !email || !password) {
+      if (
+        !firstName ||
+        !lastName ||
+        !username ||
+        !phoneNumber ||
+        !email ||
+        !password
+      ) {
         res.status(status.BAD_REQUEST).json({
           status: status[400],
-          message:
-            "Missing required fields: full_name, email, and password are required",
+          message: "Missing required fields.",
         });
         return;
       }
@@ -55,22 +62,14 @@ export class AuthController {
         password
       );
       const user = this.userRepository.create({
-        full_name,
+        first_name: firstName,
+        last_name: lastName,
+        username,
+        phone_number: phoneNumber,
         email,
         password: hashedPassword,
       });
       await this.userRepository.save(user);
-
-      const access_token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1h" }
-      );
-      const refresh_token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1w" }
-      );
 
       const verificationToken = jwt.sign(
         { email: user.email },
@@ -80,18 +79,13 @@ export class AuthController {
 
       await this.emailService.sendVerificationEmail(
         email,
-        full_name,
+        `${firstName} ${lastName}`,
         verificationToken
       );
 
-      const userResponse = plainToClass(Users, user);
-
       res.status(status.OK).json({
         status: status[200],
-        message: "Please check your email for verification mail",
-        data: userResponse,
-        access_token,
-        refresh_token,
+        message: `Please check your email "${email}" to verify your account.`,
       });
     } catch (error) {
       res
@@ -194,13 +188,126 @@ export class AuthController {
 
       await this.emailService.sendResetPasswordEmail(
         email,
-        user.full_name,
+        `${user.first_name} ${user.last_name}`,
         resetToken
       );
 
       res.status(status.OK).json({
         status: status[200],
         message: "Please check your email for reset password mail",
+      });
+    } catch (error) {
+      res
+        .status(status.INTERNAL_SERVER_ERROR)
+        .json({ status: status[500], message: "internal server error" });
+    }
+  }
+
+  async verifyEmail(req: Request, res: Response): Promise<void> {
+    const { token } = req.query;
+
+    try {
+      if (!token || typeof token !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Verification token is required",
+        });
+        return;
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET environment variable is not set");
+        res.status(status.INTERNAL_SERVER_ERROR).json({
+          status: status[500],
+          message: "Server configuration error",
+        });
+        return;
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+        email: string;
+      };
+
+      const user = await this.userRepository.findOneBy({
+        email: decoded.email,
+      });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Invalid or expired verification token",
+        });
+        return;
+      }
+
+      user.verified = true;
+      await this.userRepository.save(user);
+
+      res.status(status.OK).json({
+        status: status[200],
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      res
+        .status(status.INTERNAL_SERVER_ERROR)
+        .json({ status: status[500], message: "internal server error" });
+    }
+  }
+
+  async refreshToken(req: Request, res: Response): Promise<void> {
+    const { refresh_token } = req.body;
+
+    try {
+      if (!refresh_token || typeof refresh_token !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Refresh token is required",
+        });
+        return;
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET environment variable is not set");
+        res.status(status.INTERNAL_SERVER_ERROR).json({
+          status: status[500],
+          message: "Server configuration error",
+        });
+        return;
+      }
+
+      const decoded = jwt.verify(
+        refresh_token,
+        process.env.JWT_SECRET as string
+      ) as { id: string };
+
+      const user = await this.userRepository.findOneBy({ id: decoded.id });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Invalid or expired refresh token",
+        });
+        return;
+      }
+
+      const access_token = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1h" }
+      );
+      const refreshToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1w" }
+      );
+
+      const userResponse = plainToClass(Users, user);
+
+      res.status(status.OK).json({
+        status: status[200],
+        data: userResponse,
+        access_token,
+        refresh_token: refreshToken,
       });
     } catch (error) {
       res
@@ -275,122 +382,6 @@ export class AuthController {
       res.status(status.OK).json({
         status: status[200],
         message: "password reset successfull",
-      });
-    } catch (error) {
-      res
-        .status(status.INTERNAL_SERVER_ERROR)
-        .json({ status: status[500], message: "internal server error" });
-    }
-  }
-
-  async verifyEmail(req: Request, res: Response): Promise<void> {
-    const { token } = req.query;
-
-    try {
-      if (!token || typeof token !== "string") {
-        res.status(status.BAD_REQUEST).json({
-          status: status[400],
-          message: "Verification token is required",
-        });
-        return;
-      }
-
-      if (!process.env.JWT_SECRET) {
-        console.error("JWT_SECRET environment variable is not set");
-        res.status(status.INTERNAL_SERVER_ERROR).json({
-          status: status[500],
-          message: "Server configuration error",
-        });
-        return;
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
-        email: string;
-      };
-
-      const user = await this.userRepository.findOneBy({
-        email: decoded.email,
-      });
-
-      if (!user) {
-        res.status(status.BAD_REQUEST).json({
-          status: status[400],
-          message: "Invalid or expired verification token",
-        });
-        return;
-      }
-
-      user.verified = true;
-      await this.userRepository.save(user);
-
-      const userResponse = plainToClass(Users, user);
-
-      res.status(status.OK).json({
-        status: status[200],
-        data: userResponse,
-        message: "Email verified successfully",
-      });
-    } catch (error) {
-      res
-        .status(status.INTERNAL_SERVER_ERROR)
-        .json({ status: status[500], message: "internal server error" });
-    }
-  }
-
-  async refreshToken(req: Request, res: Response): Promise<void> {
-    const { refresh_token } = req.body;
-
-    try {
-      if (!refresh_token || typeof refresh_token !== "string") {
-        res.status(status.BAD_REQUEST).json({
-          status: status[400],
-          message: "Refresh token is required",
-        });
-        return;
-      }
-
-      if (!process.env.JWT_SECRET) {
-        console.error("JWT_SECRET environment variable is not set");
-        res.status(status.INTERNAL_SERVER_ERROR).json({
-          status: status[500],
-          message: "Server configuration error",
-        });
-        return;
-      }
-
-      const decoded = jwt.verify(
-        refresh_token,
-        process.env.JWT_SECRET as string
-      ) as { id: string };
-
-      const user = await this.userRepository.findOneBy({ id: decoded.id });
-
-      if (!user) {
-        res.status(status.BAD_REQUEST).json({
-          status: status[400],
-          message: "Invalid or expired refresh token",
-        });
-        return;
-      }
-
-      const access_token = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1h" }
-      );
-      const refreshToken = jwt.sign(
-        { id: user.id },
-        process.env.JWT_SECRET as string,
-        { expiresIn: "1w" }
-      );
-
-      const userResponse = plainToClass(Users, user);
-
-      res.status(status.OK).json({
-        status: status[200],
-        data: userResponse,
-        access_token,
-        refresh_token: refreshToken,
       });
     } catch (error) {
       res

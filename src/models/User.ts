@@ -8,7 +8,13 @@ export class Users {
   id!: string;
 
   @Column({ nullable: false })
-  full_name!: string;
+  first_name!: string;
+
+  @Column({ nullable: false })
+  last_name!: string;
+
+  @Column({ nullable: false })
+  username!: string;
 
   @Column({ unique: true, nullable: false })
   email!: string;
@@ -20,11 +26,20 @@ export class Users {
   @Column({ default: false })
   verified!: boolean;
 
+  @Column({ nullable: false })
+  phone_number!: string;
+
   @Column({ type: "timestamp", nullable: true })
   date_of_birth?: Date;
 
   @Column({ nullable: true })
   avatar?: string;
+
+  @Column({ default: new Date() })
+  created_at?: Date;
+
+  @Column({ default: new Date() })
+  updated_at?: Date;
 
   async comparePassword(candidatePassword: string): Promise<boolean> {
     return bcrypt.compare(candidatePassword, this.password);
