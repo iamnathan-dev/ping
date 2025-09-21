@@ -147,6 +147,126 @@ export class AuthController {
     }
   }
 
+  async forgotPassword(req: Request, res: Response): Promise<void> {
+    const { email } = req.body;
+
+    try {
+      if (!email || typeof email !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Email is required",
+        });
+        return;
+      }
+
+      const user = await this.userRepository.findOneBy({ email });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "User not found",
+        });
+        return;
+      }
+
+      const resetToken = jwt.sign(
+        { email: user.email },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1h" }
+      );
+
+      await this.emailService.sendResetPasswordEmail(
+        email,
+        user.full_name,
+        resetToken
+      );
+
+      res.status(status.OK).json({
+        status: status[200],
+        message: "Please check your email for reset password mail",
+      });
+    } catch (error) {
+      res
+        .status(status.INTERNAL_SERVER_ERROR)
+        .json({ status: status[500], message: "internal server error" });
+    }
+  }
+
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    const { token, password } = req.body;
+
+    try {
+      if (!token || typeof token !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Reset token is required",
+        });
+        return;
+      }
+
+      if (!password || typeof password !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Password is required",
+        });
+        return;
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET environment variable is not set");
+        res.status(status.INTERNAL_SERVER_ERROR).json({
+          status: status[500],
+          message: "Server configuration error",
+        });
+        return;
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+        email: string;
+      };
+
+      const user = await this.userRepository.findOneBy({
+        email: decoded.email,
+      });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Invalid or expired reset token",
+        });
+        return;
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      user.password = hashedPassword;
+      await this.userRepository.save(user);
+
+      const access_token = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1h" }
+      );
+      const refresh_token = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1w" }
+      );
+
+      const userResponse = plainToClass(Users, user);
+
+      res.status(status.OK).json({
+        status: status[200],
+        data: userResponse,
+        access_token,
+        refresh_token,
+      });
+    } catch (error) {
+      res
+        .status(status.INTERNAL_SERVER_ERROR)
+        .json({ status: status[500], message: "internal server error" });
+    }
+  }
+
   async verifyEmail(req: Request, res: Response): Promise<void> {
     const { token } = req.query;
 
@@ -193,6 +313,68 @@ export class AuthController {
         status: status[200],
         data: userResponse,
         message: "Email verified successfully",
+      });
+    } catch (error) {
+      res
+        .status(status.INTERNAL_SERVER_ERROR)
+        .json({ status: status[500], message: "internal server error" });
+    }
+  }
+
+  async refreshToken(req: Request, res: Response): Promise<void> {
+    const { refresh_token } = req.body;
+
+    try {
+      if (!refresh_token || typeof refresh_token !== "string") {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Refresh token is required",
+        });
+        return;
+      }
+
+      if (!process.env.JWT_SECRET) {
+        console.error("JWT_SECRET environment variable is not set");
+        res.status(status.INTERNAL_SERVER_ERROR).json({
+          status: status[500],
+          message: "Server configuration error",
+        });
+        return;
+      }
+
+      const decoded = jwt.verify(
+        refresh_token,
+        process.env.JWT_SECRET as string
+      ) as { id: string };
+
+      const user = await this.userRepository.findOneBy({ id: decoded.id });
+
+      if (!user) {
+        res.status(status.BAD_REQUEST).json({
+          status: status[400],
+          message: "Invalid or expired refresh token",
+        });
+        return;
+      }
+
+      const access_token = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1h" }
+      );
+      const refreshToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET as string,
+        { expiresIn: "1w" }
+      );
+
+      const userResponse = plainToClass(Users, user);
+
+      res.status(status.OK).json({
+        status: status[200],
+        data: userResponse,
+        access_token,
+        refresh_token: refreshToken,
       });
     } catch (error) {
       res
