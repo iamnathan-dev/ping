@@ -1,6 +1,7 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, OneToMany } from "typeorm";
 import bcrypt from "bcrypt";
 import { Exclude } from "class-transformer";
+import { Profile } from "./Profile";
 
 @Entity()
 export class Users {
@@ -8,10 +9,7 @@ export class Users {
   id!: string;
 
   @Column({ nullable: false })
-  first_name!: string;
-
-  @Column({ nullable: false })
-  last_name!: string;
+  full_name!: string;
 
   @Column({ nullable: false })
   username!: string;
@@ -26,20 +24,14 @@ export class Users {
   @Column({ default: false })
   verified!: boolean;
 
-  @Column({ nullable: false })
-  phone_number!: string;
-
-  @Column({ type: "timestamp", nullable: true })
-  date_of_birth?: Date;
-
-  @Column({ nullable: true })
-  avatar?: string;
-
   @Column({ default: new Date() })
   created_at?: Date;
 
   @Column({ default: new Date() })
   updated_at?: Date;
+
+  @OneToMany(() => Profile, (profile) => profile.user)
+  profiles?: Profile[];
 
   async comparePassword(candidatePassword: string): Promise<boolean> {
     return bcrypt.compare(candidatePassword, this.password);

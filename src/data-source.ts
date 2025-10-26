@@ -1,5 +1,6 @@
 import { DataSource } from "typeorm";
 import { Users } from "./models/User";
+import { Profile } from "./models/Profile";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -11,6 +12,6 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER || "postgres",
   password: process.env.DB_PASSWORD || "postgres",
   database: process.env.DB_NAME || "authdb",
-  entities: [Users],
+  entities: [Users, Profile],
   synchronize: process.env.NODE_ENV === "production" ? false : true,
 });

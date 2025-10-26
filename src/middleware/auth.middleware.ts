@@ -32,7 +32,7 @@ export const authMiddleware = async (
       return;
     }
 
-    (req as any).user = user;
+    req.user = user;
     next();
   } catch (error) {
     res

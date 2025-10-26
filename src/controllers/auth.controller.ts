@@ -1,35 +1,27 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../data-source";
 import { Users } from "../models/User";
+import { Profile } from "../models/Profile";
 import status from "http-status";
-import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { plainToClass } from "class-transformer";
 import { EmailService } from "../services/email.service";
-import { strongPasswordRegex } from "../constants/global.constant";
 import EncryptionService from "../services/encryption.service";
 
 dotenv.config();
 
 export class AuthController {
   private userRepository = AppDataSource.getRepository(Users);
+  private profileRepository = AppDataSource.getRepository(Profile);
   private emailService = new EmailService();
   private encryptionService = new EncryptionService();
 
   async register(req: Request, res: Response): Promise<void> {
-    const { firstName, lastName, email, password, username, phoneNumber } =
-      req.body;
+    const { fullName, email, password, username } = req.body;
 
     try {
-      if (
-        !firstName ||
-        !lastName ||
-        !username ||
-        !phoneNumber ||
-        !email ||
-        !password
-      ) {
+      if (!fullName || !username || !email || !password) {
         res.status(status.BAD_REQUEST).json({
           status: status[400],
           message: "Missing required fields.",
@@ -62,14 +54,18 @@ export class AuthController {
         password
       );
       const user = this.userRepository.create({
-        first_name: firstName,
-        last_name: lastName,
+        full_name: fullName,
         username,
-        phone_number: phoneNumber,
         email,
         password: hashedPassword,
       });
       await this.userRepository.save(user);
+
+      // Create profile for the user
+      const profile = this.profileRepository.create({
+        user,
+      });
+      await this.profileRepository.save(profile);
 
       const verificationToken = jwt.sign(
         { email: user.email },
@@ -79,13 +75,13 @@ export class AuthController {
 
       await this.emailService.sendVerificationEmail(
         email,
-        `${firstName} ${lastName}`,
+        fullName,
         verificationToken
       );
 
       res.status(status.OK).json({
         status: status[200],
-        message: `Please check your email "${email}" to verify your account.`,
+        message: `Please check your email to verify your account.`,
       });
     } catch (error) {
       res
@@ -188,7 +184,7 @@ export class AuthController {
 
       await this.emailService.sendResetPasswordEmail(
         email,
-        `${user.first_name} ${user.last_name}`,
+        user.full_name,
         resetToken
       );
 
